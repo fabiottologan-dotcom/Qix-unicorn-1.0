@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Qix - Mondi Magici</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#eadcff,#c9f4ff);font-family:system-ui,sans-serif;color:#51376a;min-height:100vh}#app{width:min(980px,100%);margin:auto;padding:10px}h1{text-align:center;margin:4px 0 8px}.panel{background:#ffffffdf;border-radius:20px;padding:12px;box-shadow:0 8px 30px #6f4a8622}.stats{display:flex;justify-content:space-around;gap:6px;margin-bottom:8px;font-weight:800}.stat{background:#f7edff;padding:7px 10px;border-radius:12px;text-align:center}#wrap{position:relative;width:100%;max-width:820px;margin:auto;aspect-ratio:820/600;overflow:hidden;border-radius:16px;background:#fff}canvas{position:absolute;inset:0;width:100%;height:100%}#game{touch-action:none}#menu{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;background:#fffffff2}.card{text-align:center;padding:24px}.levels{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}.levels button,.restart{border:0;border-radius:14px;padding:13px 20px;font-size:17px;font-weight:800;box-shadow:0 4px 12px #0002}.levels button:nth-child(1){background:#b9e7ff}.levels button:nth-child(2){background:#ffd86b}.levels button:nth-child(3){background:#ff9ecf}.hidden{display:none!important}.pad{display:grid;grid-template-columns:60px 60px 60px;grid-template-rows:60px 60px;gap:6px;justify-content:center;margin-top:10px}.pad button{border:0;border-radius:16px;background:#fff;box-shadow:0 4px 10px #0002;font-size:24px;font-weight:900;touch-action:none}.up{grid-column:2}.left{grid-column:1;grid-row:2}.down{grid-column:2;grid-row:2}.right{grid-column:3;grid-row:2}small{display:block;text-align:center;opacity:.75;margin-top:7px}
+</style></head><body><div id="app"><h1>🦄 Qix — Mondi Magici ✨</h1><div class="panel"><div class="stats"><div class="stat">Livello <span id="level">1</span>/100</div><div class="stat">Scoperto <span id="percent">0</span>%</div><div class="stat">❤️ <span id="lives">3</span></div><div class="stat">Punti <span id="score">0</span></div></div><div id="wrap"><canvas id="game" width="820" height="600"></canvas><div id="event" style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;z-index:3;pointer-events:none"><div style="background:#ffffffee;border-radius:22px;padding:22px;text-align:center"><div id="eventTitle" style="font-size:30px;font-weight:900"></div><div id="eventText" style="font-size:21px;font-weight:800"></div><div id="eventTimer"></div></div></div><div id="menu"><div class="card"><h2>🌈 Scegli la difficoltà</h2><p>Conquista il campo e scopri l'immagine magica!</p><div class="levels"><button data-d="easy">Facile</button><button data-d="normal">Normale</button><button data-d="hard">Difficile</button></div><small>PC: frecce / WASD • Telefono: pulsanti</small></div></div></div><div class="pad"><button class="up" data-m="up">▲</button><button class="left" data-m="left">◀</button><button class="down" data-m="down">▼</button><button class="right" data-m="right">▶</button></div><small>Chiudi una zona per rivelare il mondo magico nascosto!</small></div></div>
+<script>
+const W=820,H=600,S=8,C=Math.floor(W/S),R=Math.floor(H/S),cv=document.getElementById('game'),g=cv.getContext('2d'),menu=document.getElementById('menu'),im=new Image();
+let grid,player,trail=[],enemy,diff='normal',speed=3,level=1,score=0,running=false,ready=false;
+let enemies=[],lives=3,playerSpeed=7,shieldUntil=0,freezeUntil=0,doubleScoreUntil=0,imageOrder=[],imagePos=0;
+function I(x,y){return y*C+x}function cell(x,y){return{x:Math.max(0,Math.min(C-1,Math.floor(x/S))),y:Math.max(0,Math.min(R-1,Math.floor(y/S)))}}function border(){return player.x<=S*2||player.y<=S*2||player.x>=W-S*2||player.y>=H-S*2}
+function init(n){level=n;document.getElementById('level').textContent=n;grid=new Uint8Array(C*R);for(let y=0;y<R;y++)for(let x=0;x<C;x++)if(x<2||y<2||x>=C-2||y>=R-2)grid[I(x,y)]=1;trail=[];player={x:S*3,y:H/2};enemies=[{x:W*.55,y:H*.5,vx:.9,vy:.72}];enemy=enemies[0];if(imageOrder.length!==100){
+ imageOrder=Array.from({length:100},(_,i)=>i+1);
+ for(let i=99;i>0;i--){let j=Math.floor(Math.random()*(i+1));[imageOrder[i],imageOrder[j]]=[imageOrder[j],imageOrder[i]]}
+ imagePos=0;
+}
+const imgNo=imageOrder[imagePos++%100];
+im.src='assets/mondo_'+String(imgNo).padStart(3,'0')+'.svg';}
+im.onload=()=>{ready=true;draw();};
+function percent(){let all=0,got=0;for(let y=2;y<R-2;y++)for(let x=2;x<C-2;x++){all++;got+=grid[I(x,y)]}return Math.round(got/all*100)}
+
+function showEvent(title,text,seconds){
+ const e=document.getElementById('event');if(!e)return;
+ document.getElementById('eventTitle').textContent=title;
+ document.getElementById('eventText').textContent=text;
+ document.getElementById('eventTimer').textContent=seconds?seconds+' secondi':'';
+ e.style.display='flex';
+ if(seconds)setTimeout(()=>e.style.display='none',seconds*1000);
+}
+function drawFull(){if(!ready)return;g.clearRect(0,0,W,H);g.drawImage(im,0,0,W,H)}
+function loseLife(){
+ lives--;document.getElementById('lives').textContent=lives;trail=[];player.x=S*3;player.y=H/2;
+ showEvent('💥 ATTENZIONE!','Hai perso una vita!',1.5);
+ if(lives<=0){running=false;setTimeout(()=>{menu.classList.remove('hidden');menu.innerHTML='<div class="card"><h2>💔 Game Over</h2><p>Punteggio: '+score+'</p><button class="restart" onclick="location.reload()">Riprova</button></div>'},1500)}
+}
+function hitTrail(){
+ for(const e of enemies)for(let i=1;i<trail.length;i++){
+  const a=trail[i-1],b=trail[i],dx=b.x-a.x,dy=b.y-a.y,L=dx*dx+dy*dy||1;
+  const t=Math.max(0,Math.min(1,((e.x-a.x)*dx+(e.y-a.y)*dy)/L));
+  if(Math.hypot(e.x-(a.x+t*dx),e.y-(a.y+t*dy))<17)return true;
+ }
+ return false;
+}
+function maybeEvent(){
+ if(Math.random()>0.25)return;
+ const a=['speed','freeze','shield','double','slow','rage','extra'][Math.floor(Math.random()*7)];
+ if(a==='speed'){playerSpeed=14;showEvent('⚡ SUPER VELOCITÀ!','Cursore 2×',5);setTimeout(()=>playerSpeed=7,5000)}
+ if(a==='freeze'){freezeUntil=Date.now()+5000;showEvent('❄️ GELO MAGICO!','Nemico fermo per 5 secondi',5)}
+ if(a==='shield'){shieldUntil=Date.now()+5000;showEvent('🛡️ SCUDO MAGICO!','Sei protetta per 5 secondi',5)}
+ if(a==='double'){doubleScoreUntil=Date.now()+8000;showEvent('✨ DOPPIO PUNTEGGIO!','Punteggio raddoppiato',8)}
+ if(a==='slow'){playerSpeed=4;showEvent('🐌 MALUS!','Cursore rallentato',5);setTimeout(()=>playerSpeed=7,5000)}
+ if(a==='rage'){speed*=2;showEvent('😈 MOSTRO FURIOSO!','Nemico 2× per 5 secondi',5);setTimeout(()=>speed/=2,5000)}
+ if(a==='extra'&&enemies.length<2){enemies.push({x:W*.35,y:H*.35,vx:-.8,vy:.65});showEvent('👯 NUOVO NEMICO!','Ora sono in due!',0)}
+}
+function draw(){if(!ready)return;g.clearRect(0,0,W,H);g.drawImage(im,0,0,W,H);g.fillStyle='#8b70a7';g.globalAlpha=.96;for(let y=2;y<R-2;y++)for(let x=2;x<C-2;x++)if(!grid[I(x,y)])g.fillRect(x*S,y*S,S+1,S+1);g.globalAlpha=1;g.strokeStyle='#fff';g.lineWidth=5;g.strokeRect(2,2,W-4,H-4);if(trail.length){g.beginPath();trail.forEach((p,i)=>i?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y));g.strokeStyle='#ff5ca2';g.lineWidth=6;g.stroke()}g.fillStyle='#6f4a86';g.beginPath();g.arc(enemy.x,enemy.y,13,0,7);g.fill();g.fillStyle='#fff';g.beginPath();g.arc(enemy.x-4,enemy.y-3,3,0,7);g.arc(enemy.x+4,enemy.y-3,3,0,7);g.fill();g.fillStyle='#ffd34d';g.beginPath();g.arc(player.x,player.y,9,0,7);g.fill();document.getElementById('percent').textContent=percent();document.getElementById('score').textContent=score}
+function capture(){
+ if(hitTrail()){if(Date.now()>=shieldUntil)loseLife();else trail=[];return}
+ for(const p of trail){let c=cell(p.x,p.y);grid[I(c.x,c.y)]=1}
+ let seen=new Uint8Array(C*R),qx=[],qy=[],ec=cell(enemy.x,enemy.y);
+ qx.push(ec.x);qy.push(ec.y);seen[I(ec.x,ec.y)]=1;
+ for(let q=0;q<qx.length;q++){let x=qx[q],y=qy[q];for(const d of [[1,0],[-1,0],[0,1],[0,-1]]){
+  let X=x+d[0],Y=y+d[1];if(X>=0&&Y>=0&&X<C&&Y<R&&!seen[I(X,Y)]&&!grid[I(X,Y)]){seen[I(X,Y)]=1;qx.push(X);qy.push(Y)}
+ }}
+ let gain=0;for(let y=2;y<R-2;y++)for(let x=2;x<C-2;x++)if(!grid[I(x,y)]&&!seen[I(x,y)]){grid[I(x,y)]=1;gain++}
+ score+=gain*(Date.now()<doubleScoreUntil?4:2)+50;trail=[];maybeEvent();
+ if(percent()>=72){
+  running=false;drawFull();showEvent('🏆 LIVELLO COMPLETATO!','Immagine completa!',5);
+  setTimeout(()=>{if(level<100){init(level+1);running=true;requestAnimationFrame(loop)}
+  else{menu.classList.remove('hidden');menu.innerHTML='<div class="card"><h2>🏆 Tutti i 100 mondi!</h2><p>Punteggio: '+score+'</p><button class="restart" onclick="location.reload()">Gioca ancora</button></div>'}},5000);
+ }
+}
+function move(d){if(!running)return;let v={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]}[d],nx=Math.max(2,Math.min(W-2,player.x+v[0]*playerSpeed)),ny=Math.max(2,Math.min(H-2,player.y+v[1]*playerSpeed));player.x=nx;player.y=ny;let c=cell(nx,ny),on=border();if(!on){trail.push({x:nx,y:ny});if(grid[I(c.x,c.y)])capture()}else if(trail.length)capture();if(trail.length&&Math.hypot(enemy.x-player.x,enemy.y-player.y)<20)trail=[]}
+function loop(){
+ if(!running)return;
+ if(Date.now()>=freezeUntil)for(const e of enemies){
+  e.x+=e.vx*speed;e.y+=e.vy*speed;
+  if(e.x<18||e.x>W-18)e.vx*=-1;
+  if(e.y<18||e.y>H-18)e.vy*=-1;
+ }
+ if(trail.length)for(const e of enemies)if(Math.hypot(e.x-player.x,e.y-player.y)<20){if(Date.now()>=shieldUntil)loseLife();else trail=[];break}
+ draw();requestAnimationFrame(loop)
+}
+window.onkeydown=e=>{let m={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',w:'up',s:'down',a:'left',d:'right'}[e.key];if(m){e.preventDefault();move(m)}};let heldDir=null,holdTimer=null,holdRAF=null;
+function stopHold(){heldDir=null;if(holdTimer)clearTimeout(holdTimer);if(holdRAF)cancelAnimationFrame(holdRAF)}
+function startHold(dir,e){e.preventDefault();stopHold();heldDir=dir;move(dir);holdTimer=setTimeout(()=>{const r=()=>{if(!heldDir)return;move(heldDir);holdRAF=requestAnimationFrame(r)};holdRAF=requestAnimationFrame(r)},120)}
+document.querySelectorAll('[data-m]').forEach(b=>{b.addEventListener('pointerdown',e=>startHold(b.dataset.m,e));b.addEventListener('pointerup',stopHold);b.addEventListener('pointercancel',stopHold)});
+window.addEventListener('pointerup',stopHold);
+init(1);
+</script></body></html>
